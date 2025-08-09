@@ -2,9 +2,17 @@
 #include <gdiplus.h>
 #include <cstdio>
 #include <Python.h>
+
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+
 #include <numpy/arrayobject.h>
+#include <opencv2/core.hpp>
+#include "../obs-game-capture-lib/game_capture.h"
 
 using namespace Gdiplus;
+
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
 
 static PyObject* py_capture_window(PyObject* self, PyObject* args) {
     unsigned long hwnd_val;
@@ -19,78 +27,32 @@ static PyObject* py_capture_window(PyObject* self, PyObject* args) {
     }
     int width = rc.right - rc.left;
     int height = rc.bottom - rc.top;
-    HDC hdcWindow = GetDC(hwnd);
-    HDC hdcMemDC = CreateCompatibleDC(hdcWindow);
-    HBITMAP hbmScreen = CreateCompatibleBitmap(hdcWindow, width, height);
-    SelectObject(hdcMemDC, hbmScreen);
-    BitBlt(hdcMemDC, 0, 0, width, height, hdcWindow, 0, 0, SRCCOPY);
 
-    // Initialize GDI+
-    GdiplusStartupInput gdiplusStartupInput;
-    ULONG_PTR gdiplusToken;
-    if (GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL) != Ok) {
-        DeleteObject(hbmScreen);
-        DeleteDC(hdcMemDC);
-        ReleaseDC(hwnd, hdcWindow);
-        PyErr_SetString(PyExc_RuntimeError, "Failed to initialize GDI+");
+    try {
+        char window_title[256] = {0};
+        GetWindowTextA(hwnd, window_title, sizeof(window_title)-1);
+        std::string win_name(window_title);
+        GameCapture gc(width, height, width, height, win_name);
+        cv::Mat frame = gc.get_frame();
+        if (!frame.empty()) {
+            // Convert to numpy array (BGR order)
+            npy_intp dims[3] = {frame.rows, frame.cols, frame.channels()};
+            PyObject* arr = PyArray_SimpleNewFromData(3, dims, NPY_UINT8, frame.data);
+            if (!arr) {
+                PyErr_SetString(PyExc_RuntimeError, "Failed to create numpy array from GameCapture");
+                return NULL;
+            }
+            // Prevent OpenCV from freeing the data
+            PyArray_ENABLEFLAGS((PyArrayObject*)arr, NPY_ARRAY_OWNDATA);
+            frame.release();
+            return arr;
+        }
+    } catch (const std::exception& ex) {
+        PyErr_SetString(PyExc_RuntimeError, ex.what());
         return NULL;
     }
-
-    Bitmap* bmp = Bitmap::FromHBITMAP(hbmScreen, NULL);
-    if (!bmp) {
-        GdiplusShutdown(gdiplusToken);
-        DeleteObject(hbmScreen);
-        DeleteDC(hdcMemDC);
-        ReleaseDC(hwnd, hdcWindow);
-        PyErr_SetString(PyExc_RuntimeError, "Failed to create GDI+ Bitmap");
-        return NULL;
-    }
-
-    BitmapData bmpData;
-    Rect rect(0, 0, width, height);
-    if (bmp->LockBits(&rect, ImageLockModeRead, PixelFormat24bppRGB, &bmpData) != Ok) {
-        delete bmp;
-        GdiplusShutdown(gdiplusToken);
-        DeleteObject(hbmScreen);
-        DeleteDC(hdcMemDC);
-        ReleaseDC(hwnd, hdcWindow);
-        PyErr_SetString(PyExc_RuntimeError, "Failed to lock bitmap bits");
-        return NULL;
-    }
-
-    int row_stride = ((width * 3 + 3) & ~3);
-    int img_size = row_stride * height;
-    unsigned char* data = (unsigned char*)malloc(img_size);
-    if (!data) {
-        bmp->UnlockBits(&bmpData);
-        delete bmp;
-        GdiplusShutdown(gdiplusToken);
-        DeleteObject(hbmScreen);
-        DeleteDC(hdcMemDC);
-        ReleaseDC(hwnd, hdcWindow);
-        PyErr_NoMemory();
-        return NULL;
-    }
-    // Copy pixel data row by row
-    for (int y = 0; y < height; ++y) {
-        memcpy(data + y * row_stride, (unsigned char*)bmpData.Scan0 + y * bmpData.Stride, row_stride);
-    }
-    bmp->UnlockBits(&bmpData);
-    delete bmp;
-    GdiplusShutdown(gdiplusToken);
-    DeleteObject(hbmScreen);
-    DeleteDC(hdcMemDC);
-    ReleaseDC(hwnd, hdcWindow);
-
-    npy_intp dims[3] = {height, width, 3};
-    PyObject* arr = PyArray_SimpleNewFromData(3, dims, NPY_UINT8, data);
-    if (!arr) {
-        free(data);
-        PyErr_SetString(PyExc_RuntimeError, "Failed to create numpy array");
-        return NULL;
-    }
-    PyArray_ENABLEFLAGS((PyArrayObject*)arr, NPY_ARRAY_OWNDATA);
-    return arr;
+    PyErr_SetString(PyExc_RuntimeError, "GameCapture failed to capture frame");
+    return NULL;
 }
 
 static PyMethodDef WindowCaptureMethods[] = {
