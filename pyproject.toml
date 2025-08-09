@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=80.9.0", "wheel",
+    "numpy>=1.26.4"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "window_capture"
+version = "0.1.0"
+description = "Simple DLL to capture window buffer to BMP"
+dependencies = [
+    "numpy>=1.26.4"
+]
