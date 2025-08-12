@@ -1,3 +1,3 @@
 recursive-include . *.build
 include ./conan/conanfile.txt
-recursive-include src *.cpp
+recursive-include window_capture *.cpp

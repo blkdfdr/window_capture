@@ -15,3 +15,8 @@ meson = "meson_wrapper.py"
 setup = ["-Dbuildtype=release", "-Db_ndebug=if-release", "-Db_vscrt=md"]
 compile = ["-v"]
 install = ["--no-rebuild"]
+
+[dependency-groups]
+test = [
+    "window_capture"
+]

@@ -1,5 +1,4 @@
 #include <windows.h>
-#include <gdiplus.h>
 #include <cstdio>
 #include <Python.h>
 
@@ -9,12 +8,9 @@
 #include <opencv2/core.hpp>
 #include "../obs-game-capture-lib/game_capture.h"
 
-using namespace Gdiplus;
-
 #pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "dxgi.lib")
 
-static PyObject* py_capture_window(PyObject* self, PyObject* args) {
+extern "C" static PyObject* py_capture_window(PyObject* self, PyObject* args) {
     unsigned long hwnd_val;
     if (!PyArg_ParseTuple(args, "k", &hwnd_val)) {
         return NULL;
@@ -60,15 +56,19 @@ static PyMethodDef WindowCaptureMethods[] = {
     {NULL, NULL, 0, NULL}
 };
 
-static struct PyModuleDef windowcapturemodule = {
+static struct PyModuleDef window_capture = {
     PyModuleDef_HEAD_INIT,
     "window_capture",
-    NULL,
+    "",
     -1,
     WindowCaptureMethods
 };
 
-PyMODINIT_FUNC PyInit_window_capture(void) {
+extern "C" PyMODINIT_FUNC PyInit_window_capture(void) {
     import_array();
-    return PyModule_Create(&windowcapturemodule);
+    if (PyArray_API == NULL) {
+        PyErr_SetString(PyExc_ImportError, "NumPy C API not initialized");
+        return NULL;
+    }
+    return PyModule_Create(&window_capture);
 }
