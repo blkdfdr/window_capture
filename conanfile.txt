@@ -1,0 +1,34 @@
+[requires]
+opencv/4.12.0
+pkgconf/2.2.0
+
+[generators]
+PkgConfigDeps
+
+[options]
+# only enable the core module of OpenCV
+opencv/*:core=True
+
+opencv/*:contrib=False
+opencv/*:dnn=False
+opencv/*:features2d=False
+opencv/*:imgproc=False
+opencv/*:highgui=False
+opencv/*:video=False
+opencv/*:ml=False
+opencv/*:objdetect=False
+opencv/*:photo=False
+opencv/*:stitching=False
+opencv/*:videoio=False
+opencv/*:calib3d=False
+opencv/*:shape=False
+opencv/*:imgcodecs=False
+opencv/*:gapi=False
+
+# disable shared libraries for pkgconf and OpenCV
+opencv/*:shared=False
+pkgconf/*:shared=False
+
+[layout]
+cmake_layout
+

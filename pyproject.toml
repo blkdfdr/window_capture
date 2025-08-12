@@ -5,16 +5,13 @@ description = "Simple DLL to capture window buffer to BMP"
 requires-python = ">=3.13"
 
 [build-system]
-requires = [
-    "setuptools>=65.5.0",
-    "wheel>=0.38.4",
-    "numpy>=2.3.2"
-]
-build-backend = "setuptools.build_meta"
+requires = ["meson-python", "conan", "numpy==2.3.2"]
+build-backend = "mesonpy"
 
-[dependency-groups]
-dev = [
-    "pywinauto>=0.6.9",
-    "numpy>=2.3.2",
-    "window_capture>=0.1.0"
-]
+[tool.meson-python]
+meson = "meson_wrapper.py"
+
+[tool.meson-python.args]
+setup = ["-Dbuildtype=release", "-Db_ndebug=if-release", "-Db_vscrt=md"]
+compile = ["-v"]
+install = ["--no-rebuild"]

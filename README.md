@@ -1,4 +1,5 @@
-# window_capture: a simple GDI+ window capture Python extension
+# window_capture
+a simple window capture Python extension
 
 ## Install
 Add it to your dependencies:
