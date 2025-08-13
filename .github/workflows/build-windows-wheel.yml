@@ -19,10 +19,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Set up Python
-        run: uv python install
-
-      - name: Install the project
-        run: uv sync --locked --all-extras --dev
+        run: uv python install 3.13.5
 
       - name: Build wheel
         run: uv build

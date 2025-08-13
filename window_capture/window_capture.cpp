@@ -10,12 +10,70 @@
 
 #pragma comment(lib, "d3d11.lib")
 
+#include <unordered_set>
+#include <unordered_map>
+#include <mutex>
+
+// Global set and mutex to track injected HWNDs
+static std::unordered_set<HWND> injected_hwnds;
+static std::unordered_map<HWND, std::shared_ptr<GameCapture>> hwnd_to_gc;
+static std::mutex injected_hwnds_mutex;
+
+extern "C" static PyObject* py_inject_hook(PyObject* self, PyObject* args) {
+    unsigned long hwnd_val;
+    if (!PyArg_ParseTuple(args, "k", &hwnd_val)) {
+        return NULL;
+    }
+    HWND hwnd = (HWND)hwnd_val;
+    DWORD pid = 0;
+    // Reserve the hwnd early to avoid race conditions
+    {
+        std::lock_guard<std::mutex> lock(injected_hwnds_mutex);
+        if (injected_hwnds.find(hwnd) != injected_hwnds.end()) {
+            Py_RETURN_FALSE; // Already injected or in progress
+        }
+        injected_hwnds.insert(hwnd); // Reserve
+    }
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) {
+        std::lock_guard<std::mutex> lock(injected_hwnds_mutex);
+        injected_hwnds.erase(hwnd);
+        PyErr_SetString(PyExc_RuntimeError, "Failed to get process id from hwnd");
+        return NULL;
+    }
+    auto gc_ptr = std::make_shared<GameCapture>(1, 1, 1, 1, "");
+    {
+        std::lock_guard<std::mutex> lock(injected_hwnds_mutex);
+        hwnd_to_gc[hwnd] = gc_ptr;
+    }
+    HANDLE h = gc_ptr->inject_hook(pid);
+    if (h == NULL || h == INVALID_HANDLE_VALUE) {
+        std::lock_guard<std::mutex> lock(injected_hwnds_mutex);
+        injected_hwnds.erase(hwnd);
+        hwnd_to_gc.erase(hwnd);
+        PyErr_SetString(PyExc_RuntimeError, "inject_hook failed");
+        return NULL;
+    }
+    {
+        std::lock_guard<std::mutex> lock(injected_hwnds_mutex);
+        hwnd_to_gc[hwnd] = gc_ptr;
+    }
+    Py_RETURN_TRUE;
+}
+
 extern "C" static PyObject* py_capture_window(PyObject* self, PyObject* args) {
     unsigned long hwnd_val;
     if (!PyArg_ParseTuple(args, "k", &hwnd_val)) {
         return NULL;
     }
     HWND hwnd = (HWND)hwnd_val;
+
+    // Ensure hook is injected before capturing
+    PyObject* inject_result = py_inject_hook(nullptr, Py_BuildValue("k", hwnd_val));
+    if (inject_result == NULL) {
+        return NULL;
+    }
+    Py_DECREF(inject_result);
     RECT rc;
     if (!GetClientRect(hwnd, &rc)) {
         PyErr_SetString(PyExc_RuntimeError, "Failed to get window rect");
@@ -53,6 +111,7 @@ extern "C" static PyObject* py_capture_window(PyObject* self, PyObject* args) {
 
 static PyMethodDef WindowCaptureMethods[] = {
     {"capture_window", py_capture_window, METH_VARARGS, "Capture a window and return an np array (H, W, 3) in BGR order."},
+    {"inject_hook", py_inject_hook, METH_VARARGS, "Inject hook into a window if not already injected."},
     {NULL, NULL, 0, NULL}
 };
 
